@@ -3,9 +3,9 @@
 #include <vector>  //for vector
 using std::cout;
 
-int DIMX_LIM = 10;
-int DIMY_LIM = 10;
-int MAT_COUNT = 100;
+int DIMX_LIM = 100;
+int DIMY_LIM = 100;
+int MAT_COUNT = 10;
 
 int SEED = 10; //seed for rand
 
@@ -22,7 +22,7 @@ public:
         data(col * row)
         {}
 
-    int& getdata(int y, int x){
+    int& getdata(int x, int y){
        return data[y * col + x]; //vertical position * row length + pos in row
     };
 };
@@ -53,8 +53,8 @@ int main(){
         std::cout << dimxn <<" ";
         std::cout << dimyn <<" ";
         std::cout << "\n";
-        for(int x = 0; x<dimxn; x++){
-            for(int y = 0; y<dimyn; y++){
+        for(int y = 0; y<dimyn; y++){
+            for(int x = 0; x<dimxn; x++){
                 cout << mat[z]->getdata(x,y) << " ";
             }
             cout << "\n";
