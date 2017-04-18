@@ -15,11 +15,12 @@ class matrix {
 public:
     int row; //number of rows, y
     int col; //number of columns, x
-    std::vector<int> data;
+//    std::vector<int> data;
+    int* data;
 
     matrix(int columns, int rows) :
         col(columns), row(rows),
-        data(col * row)
+        data(new int[col * row])
         {}
 
     int& getdata(int x, int y){
