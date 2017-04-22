@@ -16,14 +16,14 @@ public:
     int row; //number of rows, y
     int col; //number of columns, x
 //    std::vector<int> data;
-    int* data;
+    double* data;
 
     matrix(int columns, int rows) :
         col(columns), row(rows),
-        data(new int[col * row])
+        data(new double[col * row])
         {}
 
-    int& getdata(int x, int y){
+    double& getdata(int x, int y){
        return data[y * col + x]; //vertical position * row length + pos in row
     };
 };
