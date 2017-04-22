@@ -27,31 +27,37 @@ public:
     };
 };
 
-
-int main(){
-
+matrix** initialize(){
     srand(SEED); //init random gen
-
-    matrix* mat[MAT_COUNT]; //pointer to pointer to int
     int dim[MAT_COUNT + 1]; //stores matrix sizes
-    dim[0] = rand()%DIM_LIM + 1;//random between 1 and limit
+    for(int z = 0; z <= MAT_COUNT; z++){
+        dim[z] = rand()%DIM_LIM + 1;//random between 1 and limit
+    }
 
-
+    //declare matrix array as pointer
+    matrix **mat = (matrix **)malloc(MAT_COUNT * sizeof(matrix*));
     for(int z = 0; z < MAT_COUNT; z++){
-
         //each matrix shares a dimension with the previous
-        dim[z+1] = rand()%DIM_LIM + 1;//random between 1 and limit
         int dimx = dim[z];
         int dimy = dim[z+1];
 
         mat[z] = new matrix(dimx,dimy); //dimx columns, dimy rows
         for(int x = 0; x<dimx; x++){
             for(int y = 0; y<dimy; y++){
-                mat[z]->getdata(x,y) = 5;
+                //TODO change to random double
+                mat[z]->getdata(x,y) = 5; //initialize each element
             }
         }
     }
-    
+    return mat;
+}
+
+
+int main(){
+
+    matrix **mat = initialize(); //get starting matrix
+
+    //debug by printing size and elements of each matrix in mat
     for(int z = 0; z < MAT_COUNT; z++){
         int dimxn = mat[z]->col;
         int dimyn = mat[z]->row;
@@ -66,5 +72,7 @@ int main(){
         }
         cout << "\n";
     }
+
+
 
 };
