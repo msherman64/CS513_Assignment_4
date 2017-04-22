@@ -3,8 +3,7 @@
 #include <vector>  //for vector
 using std::cout;
 
-int DIMX_LIM = 100;
-int DIMY_LIM = 100;
+int DIM_LIM = 100;
 int MAT_COUNT = 10;
 
 int SEED = 10; //seed for rand
@@ -34,11 +33,16 @@ int main(){
     srand(SEED); //init random gen
 
     matrix* mat[MAT_COUNT]; //pointer to pointer to int
+    int dim[MAT_COUNT + 1]; //stores matrix sizes
+    dim[0] = rand()%DIM_LIM + 1;//random between 1 and limit
+
 
     for(int z = 0; z < MAT_COUNT; z++){
 
-        int dimx = rand()%DIMX_LIM + 1; //random between 1 and limit
-        int dimy = rand()%DIMY_LIM + 1;
+        //each matrix shares a dimension with the previous
+        dim[z+1] = rand()%DIM_LIM + 1;//random between 1 and limit
+        int dimx = dim[z];
+        int dimy = dim[z+1];
 
         mat[z] = new matrix(dimx,dimy); //dimx columns, dimy rows
         for(int x = 0; x<dimx; x++){
