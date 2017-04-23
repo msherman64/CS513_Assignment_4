@@ -1,8 +1,8 @@
 #include <stdio.h>
 
-int DIM_LIM = 20;
-int MAT_COUNT = 3;
-int SEED = 10; //seed for rand
+int DIM_LIM = 10;
+int MAT_COUNT = 20;
+int SEED = 15; //seed for rand
     
 
 
@@ -111,11 +111,9 @@ matrix* copyMatrixDev(matrix *host){
         return d_mat;
 }
 
-matrix* hostMultMat(matrix *a, matrix *b){
-    matrix *result = new matrix(a->row,b->col);
+matrix* hostMultMat(matrix *a, matrix *d_a, matrix *b, matrix *d_b){
+    matrix *result = new matrix(a->col,b->row);
     matrix *d_result = copyMatrixDev(result);
-    matrix *d_a = copyMatrixDev(a);
-    matrix *d_b = copyMatrixDev(b);
 
     cudaDeviceSynchronize();
     mat_mult<<<1,1>>>(d_a,d_b,d_result);
@@ -129,10 +127,10 @@ matrix* hostMultMat(matrix *a, matrix *b){
 int main(){
 
     matrix **mat_arr = initialize();
-//    matrix *d_mat[MAT_COUNT];
-//    double *mat_data[MAT_COUNT];
+    matrix *d_mat[MAT_COUNT];
+    double *mat_data[MAT_COUNT];
 
-/*    for(int i = 0; i < MAT_COUNT; i++){
+    for(int i = 0; i < MAT_COUNT; i++){
 
         cudaMalloc(&d_mat[i], sizeof(matrix));
         cudaMemcpy(d_mat[i], mat_arr[i], sizeof(matrix),
@@ -144,12 +142,19 @@ int main(){
                 cudaMemcpyHostToDevice);
     //    printMat(mat_arr[i]);
     //    d_printMat<<<1,1>>>(d_mat[i]);
-    } */
-    matrix *d_result = hostMultMat(mat_arr[0],mat_arr[1]);
+    }
+    
 
-    d_printMat<<<1,1>>>(d_result);
+        //matrix *d_result = hostMultMat(mat_arr[0], d_mat[0], mat_arr[1], d_mat[1]);
+        //d_printMat<<<1,1>>>(d_result);
+        //cudaDeviceSynchronize();
+    for(int i = 0; i < MAT_COUNT-1; i++){
+        matrix *d_result = hostMultMat(mat_arr[i], d_mat[i], 
+                mat_arr[i+1], d_mat[i+1]);
+        d_printMat<<<1,1>>>(d_result);
+        cudaFree(d_result);
 
-    cudaDeviceSynchronize();
+    }
 
 
 }
