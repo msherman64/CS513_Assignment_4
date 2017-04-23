@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 int DIM_LIM = 100;
-int MAT_COUNT = 2;
+int MAT_COUNT = 10;
 int SEED = 10; //seed for rand
 
 class matrix {
@@ -76,23 +76,23 @@ matrix** initialize(){
 int main(){
 
     matrix **mat_arr = initialize();
+    matrix *d_mat[MAT_COUNT];
 
-    matrix *mat = mat_arr[0];
+    for(int i = 0; i < MAT_COUNT; i++){
 
-    printMat(mat);
+        cudaMalloc(&d_mat[i], sizeof(matrix));
+        cudaMemcpy(d_mat[i], mat_arr[i], sizeof(matrix),
+                cudaMemcpyHostToDevice);
+        double *mat_data;
+        cudaMalloc(&mat_data, sizeof(double) * mat_arr[i]->col * mat_arr[i]->row);
+        cudaMemcpy(mat_data, mat_arr[i]->data, sizeof(double) * mat_arr[i]->col * mat_arr[i]->row,
+                cudaMemcpyHostToDevice);
+        cudaMemcpy(&(d_mat[i]->data),&mat_data, sizeof(double *),
+                cudaMemcpyHostToDevice);
+        printMat(mat_arr[i]);
+        d_printMat<<<1,1>>>(d_mat[i]);
+    }
 
-    matrix *d_mat;
-    cudaMalloc(&d_mat, sizeof(matrix));
-    cudaMemcpy(d_mat, mat, sizeof(matrix),
-            cudaMemcpyHostToDevice);
-    double *mat_data;
-    cudaMalloc(&mat_data, sizeof(double) * mat->col * mat->row);
-    cudaMemcpy(mat_data, mat->data, sizeof(double) * mat->col * mat->row,
-            cudaMemcpyHostToDevice);
-    cudaMemcpy(&(d_mat->data),&mat_data, sizeof(double *),
-            cudaMemcpyHostToDevice);
-
-    d_printMat<<<1,1>>>(d_mat);
     cudaDeviceSynchronize();
 
 
