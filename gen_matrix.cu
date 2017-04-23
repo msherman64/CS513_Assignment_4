@@ -1,6 +1,5 @@
 #include <stdlib.h> //for rand
 #include <iostream> // for cout
-#include <vector>  //for vector
 using std::cout;
 
 int DIM_LIM = 100;
@@ -14,7 +13,6 @@ class matrix {
 public:
     int row; //number of rows, y
     int col; //number of columns, x
-//    std::vector<int> data;
     double* data;
 
     matrix(int columns, int rows) :
@@ -55,7 +53,47 @@ matrix** initialize(){
 
 int main(){
 
-    matrix **mat = initialize(); //get starting matrix
+    /* steps for getting matrices onto device
+       create data on host
+       malloc array of pointers to matrices on device
+       malloc each matrix on device
+       malloc each matrix's data on device
+       copy matrix 
+       copy data pointer
+       copy data */
+
+    //get pointer to array of initialized matrices on host
+    matrix **mat = initialize(); 
+    // pointer to array of matrices on device
+    matrix **d_mat; 
+
+    //allocate space on device for array of pointers
+    cudaMalloc(&d_mat, MAT_COUNT * sizeof(matrix*)); 
+    // temporary array of pointers to each matrix on device, for malloc
+    matrix *d_tmp_mat[MAT_COUNT];
+    double *d_mat_data[MAT_COUNT]; //pointer to each matrice's data, for malloc
+
+    for(int i = 0; i < MAT_COUNT; i++){
+        cudaMalloc(&d_tmp_mat[i], sizeof(matrix)); //allocate each matrix object
+        cudaMemcpy(d_tmp_mat[i], &mat[i], sizeof(matrix),
+                cudaMemcpyHostToDevice); //copy matrix object from host to device
+        cudaMemcpy(&d_mat[i], &d_tmp_mat[i], sizeof(matrix *),
+                cudaMemcpyHostToDevice); //copy pointer to device matrix into place
+
+        cudaMalloc(&d_mat_data[i], sizeof(double *) * mat[0]->row * mat[0]->col);
+        cudaMemcpy(&d_mat_data[i], mat[i]->data, 
+                sizeof(double *) * mat[i]->row * mat[i]->col,
+                cudaMemcpyHostToDevice);
+        cudaMemcpy(&(d_tmp_mat[i]->data), &d_mat_data[i], sizeof(double *),
+                cudaMemcpyHostToDevice);
+
+    }
+
+
+
+
+
+
 
     //debug by printing size and elements of each matrix in mat
     for(int z = 0; z < MAT_COUNT; z++){
