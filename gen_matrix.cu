@@ -1,29 +1,52 @@
-#include <stdlib.h> //for rand
-#include <iostream> // for cout
-using std::cout;
+#include <stdio.h>
 
 int DIM_LIM = 100;
-int MAT_COUNT = 10;
-
+int MAT_COUNT = 2;
 int SEED = 10; //seed for rand
 
-//generate random sized matrices, add pointer to each, to vector
-//template <typename T> //handle multiple types
 class matrix {
 public:
     int row; //number of rows, y
     int col; //number of columns, x
     double* data;
-
+    
     matrix(int columns, int rows) :
         col(columns), row(rows),
         data(new double[col * row])
         {}
 
-    double& getdata(int x, int y){
+    __host__ __device__ double& getdata(int x, int y){
        return data[y * col + x]; //vertical position * row length + pos in row
     };
 };
+
+
+__global__ void d_printMat(matrix *mat)
+{   
+        int dimxn = mat->col;
+        int dimyn = mat->row;
+        printf("Dim x %d, Dim y %d\n", dimxn, dimyn);
+        for(int y = 0; y<dimyn; y++){
+            for(int x = 0; x<dimxn; x++){
+                printf("%lf ", mat->getdata(x,y));
+            }
+            printf("\n");
+        }
+        printf("\n");
+}
+__host__ void printMat(matrix *mat)
+{   
+        int dimxn = mat->col;
+        int dimyn = mat->row;
+        printf("Dim x %d, Dim y %d\n", dimxn, dimyn);
+        for(int y = 0; y<dimyn; y++){
+            for(int x = 0; x<dimxn; x++){
+                printf("%lf ", mat->getdata(x,y));
+            }
+            printf("\n");
+        }
+        printf("\n");
+}
 
 matrix** initialize(){
     srand(SEED); //init random gen
@@ -50,67 +73,28 @@ matrix** initialize(){
     return mat;
 }
 
-
 int main(){
 
-    /* steps for getting matrices onto device
-       create data on host
-       malloc array of pointers to matrices on device
-       malloc each matrix on device
-       malloc each matrix's data on device
-       copy matrix 
-       copy data pointer
-       copy data */
+    matrix **mat_arr = initialize();
 
-    //get pointer to array of initialized matrices on host
-    matrix **mat = initialize(); 
-    // pointer to array of matrices on device
-    matrix **d_mat; 
+    matrix *mat = mat_arr[0];
 
-    //allocate space on device for array of pointers
-    cudaMalloc(&d_mat, MAT_COUNT * sizeof(matrix*)); 
-    // temporary array of pointers to each matrix on device, for malloc
-    matrix *d_tmp_mat[MAT_COUNT];
-    double *d_mat_data[MAT_COUNT]; //pointer to each matrice's data, for malloc
+    printMat(mat);
 
-    for(int i = 0; i < MAT_COUNT; i++){
-        cudaMalloc(&d_tmp_mat[i], sizeof(matrix)); //allocate each matrix object
-        cudaMemcpy(d_tmp_mat[i], &mat[i], sizeof(matrix),
-                cudaMemcpyHostToDevice); //copy matrix object from host to device
-        cudaMemcpy(&d_mat[i], &d_tmp_mat[i], sizeof(matrix *),
-                cudaMemcpyHostToDevice); //copy pointer to device matrix into place
+    matrix *d_mat;
+    cudaMalloc(&d_mat, sizeof(matrix));
+    cudaMemcpy(d_mat, mat, sizeof(matrix),
+            cudaMemcpyHostToDevice);
+    double *mat_data;
+    cudaMalloc(&mat_data, sizeof(double) * mat->col * mat->row);
+    cudaMemcpy(mat_data, mat->data, sizeof(double) * mat->col * mat->row,
+            cudaMemcpyHostToDevice);
+    cudaMemcpy(&(d_mat->data),&mat_data, sizeof(double *),
+            cudaMemcpyHostToDevice);
 
-        cudaMalloc(&d_mat_data[i], sizeof(double *) * mat[0]->row * mat[0]->col);
-        cudaMemcpy(&d_mat_data[i], mat[i]->data, 
-                sizeof(double *) * mat[i]->row * mat[i]->col,
-                cudaMemcpyHostToDevice);
-        cudaMemcpy(&(d_tmp_mat[i]->data), &d_mat_data[i], sizeof(double *),
-                cudaMemcpyHostToDevice);
-
-    }
+    d_printMat<<<1,1>>>(d_mat);
+    cudaDeviceSynchronize();
 
 
+}
 
-
-
-
-
-    //debug by printing size and elements of each matrix in mat
-    for(int z = 0; z < MAT_COUNT; z++){
-        int dimxn = mat[z]->col;
-        int dimyn = mat[z]->row;
-        std::cout << dimxn <<" ";
-        std::cout << dimyn <<" ";
-        std::cout << "\n";
-        for(int y = 0; y<dimyn; y++){
-            for(int x = 0; x<dimxn; x++){
-                cout << mat[z]->getdata(x,y) << " ";
-            }
-            cout << "\n";
-        }
-        cout << "\n";
-    }
-
-
-
-};
