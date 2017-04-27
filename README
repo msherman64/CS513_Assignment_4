@@ -2,8 +2,8 @@ MEMBERS
 
 Michael Sherman
 Subha Srikanth
-KSHITIJ VIDYUT SHAH
-DHRUV DOGRA
+Kshitij Vidyut Shah
+Dhruv Dogra
 
 
 
@@ -11,7 +11,7 @@ DHRUV DOGRA
 
 Data structure
 
-Defined a Matrix class, that stores x and y dimensions, as well as a vector of
+Defined a matrix class, that stores x and y dimensions, as well as a vector of
 values. This will be defined for data of type float and int, for testing.
 
 The class handles its own memory management, and supports indexing into the 
@@ -23,11 +23,11 @@ Algorithm
 1.) Sequential multiplication on the CPU
 2.) Sequential multiplication on the GPU
 3.) Optimized sequential multiplication on the GPU
-4.) Binary tree paralell multiplication on the GPU
+4.) Binary tree parallel multiplication on the GPU
 5.) Hybrid approach between 3 and 4.
 
 The goal is to keep all cores busy, while running a work-efficient algorithm. 
-We do not have enough cores to run a non-efficient algorithm, even if the time
+We do not have enough cores to run an inefficient algorithm, even if the time
 complexity is theoretically better for large numbers of cores.
 
 
