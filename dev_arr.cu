@@ -6,7 +6,7 @@
 
 
 int DIM_LIM = 10;
-int MAT_COUNT = 10;
+int MAT_COUNT = 20;
 int SEED = 15; //seed for rand
 
 
@@ -36,7 +36,7 @@ void init_matrix(matrix * mat){
 
 	for(int x = 0; x < x_dim; x++){
 		for(int y = 0; y < y_dim; y++){
-			arr[x][y] = 1;
+			arr[x][y] = 5;
 		}
 	}
 
@@ -68,7 +68,6 @@ __global__ void d_multMat(matrix *mat_a, matrix *mat_b, matrix *result)
             printf("does not match!");
 	}
 	else {
-
 		int tmp=0;
 		for(int x=0; x < dim_a; x++){
 		    for(int y=0; y < dim_c; y++){
@@ -79,15 +78,35 @@ __global__ void d_multMat(matrix *mat_a, matrix *mat_b, matrix *result)
 			result->getData(x,y)=tmp;
 		    }
 		}
-			    
 	}
+}
 
 
+__global__ void d_multMat_thd(matrix *mat_a, matrix *mat_b, matrix *result)
+{
+	//input: [a x b] * [b x c] = [a x c]
+	int dim_a = mat_a->col;
+	int dim_b = mat_a->row;
+	int dim_c = mat_b->row;
 
-
-
-
-
+	int idx = threadIdx.x; 
+	int idy = threadIdx.y; 
+	int tmp = 0;
+	if(mat_a->row != mat_b->col)
+	{
+            printf("does not match!");
+	}
+	else 
+	{
+		if(idx < dim_a){
+		    if(idy < dim_c){
+			for(int z=0; z < dim_b; z++){
+			    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+			}
+			result->getData(idx,idy) = tmp;
+		    }
+		}
+	}
 }
 
 
@@ -129,7 +148,10 @@ int main(){
 		cudaMemcpy(d_result, result, sizeof(matrix), cudaMemcpyHostToDevice);
 		cudaDeviceSynchronize();
 
-		d_multMat<<<1,1>>>(d_mat_arr[i],d_mat_arr[i+1],d_result);
+		dim3 numBlocks(1);
+		dim3 threadsPerBlock(10,10);
+		d_multMat_thd<<<numBlocks,threadsPerBlock>>>(d_mat_arr[i],d_mat_arr[i+1],d_result);
+
 		cudaDeviceSynchronize();
 		d_printMat<<<1,1>>>(d_result);
 		cudaDeviceSynchronize();
