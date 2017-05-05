@@ -33,7 +33,13 @@ complexity is theoretically better for large numbers of cores.
 
 
 
+Compliation:
+run make
 
+Usage
+./multiply 0.08 10000
+
+this will initialize 5000 matrices with the value 0.2, and then multiply.
 
 
 
