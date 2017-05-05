@@ -5,8 +5,8 @@
 
 
 
-int DIM_LIM = 10;
-int MAT_COUNT = 20;
+int DIM_LIM = 15;
+int MAT_COUNT = 10;
 int SEED = 15; //seed for rand
 
 class Managed {
@@ -47,11 +47,11 @@ public:
 void init_matrix(Matrix *mat){
 	int x_dim = mat->row;
 	int y_dim = mat->col;
-        double arr[x_dim][y_dim];
+    double arr[x_dim][y_dim];
 
 	for(int x = 0; x < x_dim; x++){
 		for(int y = 0; y < y_dim; y++){
-			arr[x][y] = 5;
+			arr[x][y] = 5.;
 		}
 	}
 
@@ -83,7 +83,7 @@ __global__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
             printf("does not match!");
 	}
 	else {
-		int tmp=0;
+		double tmp = 0;
 		for(int x=0; x < dim_a; x++){
 		    for(int y=0; y < dim_c; y++){
 			tmp=0;	
@@ -141,6 +141,7 @@ int main(){
 	for(int i=0; i<MAT_COUNT; i++){
 		d_mat_arr[i] = new Matrix(dim[i],dim[i+1]); //array and matrix are shared
 		init_matrix(d_mat_arr[i]);                  //init values
+        printf("matrix %d size %dx%d\n", i, d_mat_arr[i]->col, d_mat_arr[i]->row);
 	}
 
 	//end generate array
@@ -159,25 +160,27 @@ int main(){
 
     for(int i=0; i < MAT_COUNT - 1; i++){
 
-        int dimxn = dim[i];
-        int dimyn = dim[i+2];
+        int dimxn = d_mat_arr[i]->col;
+        int dimyn = d_mat_arr[i+1]->row;
 
         //allocate memory for correctly sized result matrix
         d_result = new Matrix(dimxn,dimyn); //we will be leaking host memory here
         cudaDeviceSynchronize();
 
 
-        dim3 numBlocks(1);
-        dim3 threadsPerBlock(10,10);
+//        dim3 numBlocks(1);
+//        dim3 threadsPerBlock(10,10);
         //multiply matrix i, i+1, store in d_result
-        d_multMat_thd<<<numBlocks,threadsPerBlock>>>(d_mat_arr[i],d_mat_arr[i+1],d_result);
+        d_multMat<<<1,1>>>(d_mat_arr[i],d_mat_arr[i+1],d_result);
         
         
         cudaDeviceSynchronize();
         d_printMat<<<1,1>>>(d_result);
         cudaDeviceSynchronize();
 
-        delete d_result;
+        delete d_mat_arr[i];
+        delete d_mat_arr[i+1];
+        d_mat_arr[i+1] = d_result;
     }
 /*
 //        cudaFree(d_mat_arr[i]); //free source values
