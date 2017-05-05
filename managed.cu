@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <fstream>
 
 // CUDA runtime
 #include <cuda_runtime.h>
@@ -59,18 +60,18 @@ void init_matrix(Matrix *mat){
 	cudaMemcpy(mat->d_data, arr, sizeof(arr), cudaMemcpyHostToDevice);
 }
 
-__global__ void d_printMat(Matrix *mat)
+__global__ void d_printMat(Matrix *mat, FILE* f)
 {   
         int dimxn = mat->col;
         int dimyn = mat->row;
-        printf("Dim x %d, Dim y %d\n", dimxn, dimyn);
+        fprintf(f, "Dim x %d, Dim y %d\n", dimxn, dimyn);
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
-                printf("%.10e ", mat->getData(x,y));
+                fprintf(f, "%.10e ", mat->getData(x,y));
             }
-            printf("\n");
+            fprintf(f, "\n");
         }
-        printf("\n");
+        fprintf(f, "\n");
 }
 
 __global__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
@@ -194,7 +195,10 @@ int main(int argc, char *argv[]){
 
     Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
     cudaDeviceSynchronize();
-    d_printMat<<<1,1>>>(d_result);
+    FILE *fp = NULL;
+    fp = fopen("output.txt","w");
+    d_printMat<<<1,1>>>(d_result, fp);
+    fclose(fp);
     cudaDeviceSynchronize();
 
 	printf("finished!\n");

@@ -20,11 +20,13 @@ matrix as normal.
 
 
 Algorithm
-1.) Sequential multiplication on the CPU
-2.) Sequential multiplication on the GPU
-3.) Optimized sequential multiplication on the GPU
-4.) Binary tree parallel multiplication on the GPU
-5.) Hybrid approach between 3 and 4.
+There are five different algorithms to implement based on the number of matrices and number of processors:
+
+1) Sequential multiplication on the CPU
+2) Sequential multiplication on the GPU
+3) Optimized sequential multiplication on the GPU
+4) Binary tree parallel multiplication on the GPU
+5) Hybrid approach between 3 and 4.
 
 The goal is to keep all cores busy, while running a work-efficient algorithm. 
 We do not have enough cores to run an inefficient algorithm, even if the time
@@ -33,13 +35,13 @@ complexity is theoretically better for large numbers of cores.
 
 
 
-Compliation:
+Compilation:
 run make
 
-Usage
+Usage:
 ./multiply 0.08 10000
 
-this will initialize 5000 matrices with the value 0.2, and then multiply.
+This will initialize 5000 matrices with the value 0.2, and then multiply.
 
 
 
