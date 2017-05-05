@@ -135,15 +135,12 @@ int main(){
 	//end initialize
 
 	//generate array of matrices from size array
-//	matrix *mat_arr[MAT_COUNT];  //pointer to array of matrices on host
 	Matrix **d_mat_arr;  //pointer to array of matrices on device
     cudaMallocManaged(&d_mat_arr, sizeof(Matrix*) * MAT_COUNT); //malloc space for pointer array
 
 	for(int i=0; i<MAT_COUNT; i++){
 		d_mat_arr[i] = new Matrix(dim[i],dim[i+1]); //array and matrix are shared
 		init_matrix(d_mat_arr[i]);                  //init values
-//		cudaMalloc(&d_mat_arr[i], sizeof(matrix));  //make space for matrix object on dev
-//		cudaMemcpy(d_mat_arr[i], mat_arr[i], sizeof(matrix), cudaMemcpyHostToDevice); //copy matrix object to dev
 	}
 
 	//end generate array
@@ -155,23 +152,18 @@ int main(){
 
        free i and i+1, point i+1 to result
        iterate
-        
-
-
        */
-/*
-    matrix *result;
-    matrix *d_result;
-    cudaMallocManaged(&d_result, sizeof(matrix));
+    
+    Matrix *d_result; //pointer to result matrix
+    cudaMallocManaged(&d_result, sizeof(Matrix)); //pointer valid on host and device
 
     for(int i=0; i < MAT_COUNT - 1; i++){
 
-        int dimxn = dim[0];
+        int dimxn = dim[i];
         int dimyn = dim[i+2];
 
         //allocate memory for correctly sized result matrix
-        result = new matrix(dimxn,dimyn); //we will be leaking host memory here
-        cudaMemcpy(d_result, result, sizeof(matrix), cudaMemcpyHostToDevice);
+        d_result = new Matrix(dimxn,dimyn); //we will be leaking host memory here
         cudaDeviceSynchronize();
 
 
@@ -185,6 +177,9 @@ int main(){
         d_printMat<<<1,1>>>(d_result);
         cudaDeviceSynchronize();
 
+        delete d_result;
+    }
+/*
 //        cudaFree(d_mat_arr[i]); //free source values
 //        cudaFree(d_mat_arr[i+1]);
         d_mat_arr[i+1] = d_result;  //point position i+1 to result, for next iteration
