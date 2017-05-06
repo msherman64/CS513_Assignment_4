@@ -79,9 +79,11 @@ void printMat(Matrix *mat, FILE *f)
         int dimxn = mat->col;
         int dimyn = mat->row;
         fprintf(f, "Dim x %d, Dim y %d\n", dimxn, dimyn);
+	double* data = NULL;
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
-                fprintf(f, "%.10e ", mat->getData(x,y));
+		cudaMemcpy((void*)data, (void**)&mat->getData(x,y), sizeof(double), cudaMemcpyDeviceToHost);
+                fprintf(f, "%lf ", *data);
             }
             fprintf(f, "\n");
         }
