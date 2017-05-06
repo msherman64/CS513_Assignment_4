@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <fstream>
+#include <fcntl.h>
+#include <unistd.h>
 
 // CUDA runtime
 #include <cuda_runtime.h>
@@ -45,6 +47,26 @@ public:
        return d_data[y * col + x]; //vertical position * row length + pos in row
     }
 };
+
+static int fd;
+static fpos_t pos;
+
+void switchStdout(const char *newStream)
+{
+  fflush(stdout);
+  fgetpos(stdout, &pos);
+  fd = dup(fileno(stdout));
+  freopen(newStream, "w", stdout);
+}
+
+void revertStdout()
+{
+  fflush(stdout);
+  dup2(fd, fileno(stdout));
+  close(fd);
+  clearerr(stdout);
+  fsetpos(stdout, &pos);
+}
 
 void init_matrix(Matrix *mat){
 	int x_dim = mat->row;
@@ -211,13 +233,10 @@ int main(int argc, char *argv[]){
 
     Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
     cudaDeviceSynchronize();
-    FILE *fp = NULL;
-    fp = fopen("output.txt","w");
-    //d_printMat<<<1,1>>>(d_result);
-    printMat(d_result, fp);
-    fclose(fp);
+    switchStdout("output.txt");
+    d_printMat<<<1,1>>>(d_result);
     cudaDeviceSynchronize();
-
-	printf("finished!\n");
-	return 0;
+    revertStdout();
+    printf("finished!\n");
+    return 0;
 }
