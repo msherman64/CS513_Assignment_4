@@ -4,24 +4,38 @@
 #include <cuda_runtime.h>
 
 
-
+//constant for architecture
 int DIM_LIM = 32;
-int MAT_COUNT = 1000;
 int SEED = 15; //seed for rand
+int CHUNK_SIZE = 2<<14; //memory limit for ilab machine
+//set via argument
 double INIT_VAL = 0.06;
+int MAT_COUNT = 1000;
+
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 
 class Managed {
 public:
   void *operator new(size_t len) {
     void *ptr;
-    cudaMallocManaged(&ptr, len);
-    cudaDeviceSynchronize();
+    gpuErrchk(cudaMallocManaged(&ptr, len));
+    gpuErrchk(cudaDeviceSynchronize());
     return ptr;
   }
 
   void operator delete(void *ptr) {
-    cudaDeviceSynchronize();
-    cudaFree(ptr);
+    gpuErrchk(cudaDeviceSynchronize());
+    gpuErrchk(cudaFree(ptr));
   }
 };
 
@@ -37,8 +51,9 @@ public:
         col(columns), row(rows)        
         {cudaMalloc(&d_data, sizeof(double) * columns * rows );}
 
-    Matrix( const Matrix& _orig ) { *this = _orig; isCopy = true;}
-    ~Matrix(){if(!isCopy) cudaFree(d_data);}
+//    Matrix( const Matrix& _orig ) { *this = _orig; isCopy = true;}
+//    ~Matrix(){if(!isCopy) cudaFree(d_data);}
+    ~Matrix(){cudaFree(d_data);}
 
     __device__ double& getData(int x, int y){
        return d_data[y * col + x]; //vertical position * row length + pos in row
@@ -152,10 +167,16 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
 
 }
 
+//check if value is power of two, using bitwise AND
+bool isPowerOfTwo(ulong x)
+{
+    return (x & (x - 1)) == 0;
+}
+
 __global__ void d_multmat_chain(Matrix **mat_arr, Matrix **mat_result, int count){
 
    //get matrix pair 
-	int idx = threadIdx.x; 
+	int idx = blockIdx.x; 
     d_multMat(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
 
 }
@@ -164,28 +185,61 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
     /* do k/2 multiplications, then store results
        repeat with k/2/2, etc, until only one result
        */
+        if(isPowerOfTwo(count))
+        {
+            int result_size = count/2;
+            Matrix **d_result; //pointer to result matrix
+            gpuErrchk(cudaMallocManaged(&d_result, sizeof(Matrix*) * result_size)); //pointer valid on host and device
 
-        int result_size = count/2;
-        Matrix **d_result; //pointer to result matrix
-        cudaMallocManaged(&d_result, sizeof(Matrix*) * result_size); //pointer valid on host and device
+            for(int j = 0; j < result_size; j++){
+                int dimxn = mat_arr[2 * j]->col;
+                int dimyn = mat_arr[(2 * j) + 1]->row;
+                d_result[j] = new Matrix(dimxn, dimyn);
+            }
+            d_multmat_chain<<<result_size,1>>>(mat_arr, d_result, result_size);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk( cudaDeviceSynchronize() );
+            //free input data
+            for(int mat_index = 0; mat_index < count; mat_index++){
+                delete mat_arr[mat_index];
+            }
+            gpuErrchk(cudaFree(mat_arr));
 
-        for(int j = 0; j < result_size; j++){
-            int dimxn = mat_arr[2 * j]->col;
-            int dimyn = mat_arr[(2 * j) + 1]->row;
-            d_result[j] = new Matrix(dimxn, dimyn);
+            //recurse
+            if(result_size == 1){
+                Matrix *result = d_result[0];
+                gpuErrchk(cudaFree(d_result));
+                return result;
+            }
+            else{
+                Matrix *tmp = chain_tree(d_result, result_size);
+/*                for(int mat_index = 1; mat_index < result_size; mat_index++){
+                    delete d_result[mat_index];
+                }
+                gpuErrchk(cudaFree(d_result)); */
+
+                return tmp;
+            }
         }
-        d_multmat_chain<<<1,result_size>>>(mat_arr, d_result, result_size);
-        cudaDeviceSynchronize();
-
-        if(result_size == 1){
-            return d_result[0];
-        }
-        else{
-            return chain_tree(d_result, result_size);
+        else
+        {
+            return NULL;
         }
 }
 
 
+
+Matrix **generate(int *dim, int count){
+	Matrix **d_mat_arr;  //pointer to array of matrices on device
+    cudaMallocManaged(&d_mat_arr, sizeof(Matrix*) * count); //malloc space for pointer array
+
+	for(int i = 0; i < count; i++){
+		d_mat_arr[i] = new Matrix(dim[i], dim[i+1]); //array and matrix are shared
+		init_matrix(d_mat_arr[i]);                  //init values
+        //printf("matrix %d size %dx%d\n", i, d_mat_arr[i]->col, d_mat_arr[i]->row);
+	}
+    return d_mat_arr;    
+}
 
 int main(int argc, char *argv[]){
     if(argc == 3){
@@ -205,33 +259,29 @@ int main(int argc, char *argv[]){
 	//end initialize
 
 	//generate array of matrices from size array
-	Matrix **d_mat_arr;  //pointer to array of matrices on device
-    cudaMallocManaged(&d_mat_arr, sizeof(Matrix*) * MAT_COUNT); //malloc space for pointer array
 
-	for(int i=0; i<MAT_COUNT; i++){
-		d_mat_arr[i] = new Matrix(dim[i],dim[i+1]); //array and matrix are shared
-		init_matrix(d_mat_arr[i]);                  //init values
-        //printf("matrix %d size %dx%d\n", i, d_mat_arr[i]->col, d_mat_arr[i]->row);
-	}
+    int *dim_ptr = dim;
+    for(int i = MAT_COUNT; i > 0; i = i - CHUNK_SIZE){
+        int count = min(i, CHUNK_SIZE);
+        printf("main: chunk loop %d, %d matrices\n", i, count);
 
-	//end generate array
+        Matrix **d_mat_arr = generate(dim_ptr, count);
 
-    /*
-       starting array is on device
-       cudaMalloc space for first result
-       store result there
+        //Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
+        Matrix *d_result = chain_tree(d_mat_arr, count);
+        gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk(cudaDeviceSynchronize());
 
-       free i and i+1, point i+1 to result
-       iterate
-       */
-    
-
-//    Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
-    Matrix *d_result = chain_tree(d_mat_arr, MAT_COUNT);
-    cudaDeviceSynchronize();
-    d_printMat<<<1,1>>>(d_result);
-    cudaDeviceSynchronize();
-
-	printf("finished!\n");
+        if(d_result){
+            d_printMat<<<1,1>>>(d_result);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk( cudaDeviceSynchronize() );
+            printf("finished!\n");
+        }
+        else{
+            printf("no valid result\n");
+        }
+        dim_ptr += count;
+    }
 	return 0;
 }
