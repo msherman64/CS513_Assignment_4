@@ -73,7 +73,7 @@ __global__ void d_printMat(Matrix *mat)
         printf("\n");
 }
 
-__global__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
+__device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 {
 	//input: [a x b] * [b x c] = [a x c]
 	int dim_a = mat_a->col;
@@ -152,6 +152,40 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
 
 }
 
+__global__ void d_multmat_chain(Matrix **mat_arr, Matrix **mat_result, int count){
+
+   //get matrix pair 
+	int idx = threadIdx.x; 
+    d_multMat(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
+
+}
+
+Matrix * chain_tree(Matrix **mat_arr, int count){
+    /* do k/2 multiplications, then store results
+       repeat with k/2/2, etc, until only one result
+       */
+
+        int result_size = count/2;
+        Matrix **d_result; //pointer to result matrix
+        cudaMallocManaged(&d_result, sizeof(Matrix*) * result_size); //pointer valid on host and device
+
+        for(int j = 0; j < result_size; j++){
+            int dimxn = mat_arr[2 * j]->col;
+            int dimyn = mat_arr[(2 * j) + 1]->row;
+            d_result[j] = new Matrix(dimxn, dimyn);
+        }
+        d_multmat_chain<<<1,result_size>>>(mat_arr, d_result, result_size);
+        cudaDeviceSynchronize();
+
+        if(result_size == 1){
+            return d_result[0];
+        }
+        else{
+            return chain_tree(d_result, result_size);
+        }
+}
+
+
 
 int main(int argc, char *argv[]){
     if(argc == 3){
@@ -192,7 +226,8 @@ int main(int argc, char *argv[]){
        */
     
 
-    Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
+//    Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
+    Matrix *d_result = chain_tree(d_mat_arr, MAT_COUNT);
     cudaDeviceSynchronize();
     d_printMat<<<1,1>>>(d_result);
     cudaDeviceSynchronize();
