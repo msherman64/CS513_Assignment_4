@@ -41,7 +41,7 @@ public:
     Matrix( const Matrix& _orig ) { *this = _orig; isCopy = true;}
     ~Matrix(){if(!isCopy) cudaFree(d_data);}
 
-    __device__ double& getData(int x, int y){
+    __host__ __device__ double& getData(int x, int y){
        return d_data[y * col + x]; //vertical position * row length + pos in row
     }
 };
@@ -60,7 +60,21 @@ void init_matrix(Matrix *mat){
 	cudaMemcpy(mat->d_data, arr, sizeof(arr), cudaMemcpyHostToDevice);
 }
 
-__global__ void d_printMat(Matrix *mat, FILE* f)
+__global__ void d_printMat(Matrix *mat)
+{   
+        int dimxn = mat->col;
+        int dimyn = mat->row;
+        printf("Dim x %d, Dim y %d\n", dimxn, dimyn);
+        for(int y = 0; y<dimyn; y++){
+            for(int x = 0; x<dimxn; x++){
+                printf("%.10e ", mat->getData(x,y));
+            }
+            printf("\n");
+        }
+        printf("\n");
+}
+
+void printMat(Matrix *mat, FILE *f)
 {   
         int dimxn = mat->col;
         int dimyn = mat->row;
@@ -197,7 +211,8 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize();
     FILE *fp = NULL;
     fp = fopen("output.txt","w");
-    d_printMat<<<1,1>>>(d_result, fp);
+    //d_printMat<<<1,1>>>(d_result);
+    printMat(d_result, fp);
     fclose(fp);
     cudaDeviceSynchronize();
 
