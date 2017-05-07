@@ -27,38 +27,39 @@ Compilation:
     Run make
 
 Usage
-First, execute gen_file.
+    First, execute gen_file.
 
-./gen_file 0.17 100000
+    ./gen_file 0.17 100000
 
-Then, execute multiply
-./multiply tree out.txt
+    Then, execute multiply
+    ./multiply tree out.txt
 
-Data structure
+    Data structure
 
-Defined a matrix class, that stores x and y dimensions, as well as a device array of
-values. This is defined only for doubles.
+    Defined a matrix class, that stores x and y dimensions, as well as a device array of
+    values. This is defined only for doubles.
 
-The class handles its own memory management, and supports indexing into the 
-matrix as normal.
+    The class handles its own memory management, and supports indexing into the 
+    matrix as normal.
 
 
 
-Algorithms 1.) Sequential multiplication on the CPU
-2.) Sequential multiplication on the GPU
-3.) Optimized sequential multiplication on the GPU
-4.) Binary tree parallel multiplication on the GPU
-5.) Hybrid approach between 3 and 4.
+Algorithms
+    1.) Sequential multiplication on the CPU
+    2.) Sequential multiplication on the GPU
+    3.) Optimized sequential multiplication on the GPU
+    4.) Binary tree parallel multiplication on the GPU
+    5.) Hybrid approach between 3 and 4.
 
-(note, assume for GPU that individual matrix elements are bein multiplied in parallel, sequential and parallel 
-above refer to how many matrices are in parallel.
+    (Note: Assume for GPU that individual matrix elements are bein multiplied in parallel,
+    sequential and parallel above refer to how many matrices are in parallel.)
 
-The goal is to keep all cores busy, while running a work-efficient algorithm. 
-We do not have enough cores to run an inefficient algorithm, even if the time
-complexity is theoretically better for large numbers of cores.
+    The goal is to keep all cores busy, while running a work-efficient algorithm. 
+    We do not have enough cores to run an inefficient algorithm, even if the time
+    complexity is theoretically better for large numbers of cores.
 
 
 
 
 References
-http://stackoverflow.com/questions/2076624/c-matrix-class
+    http://stackoverflow.com/questions/2076624/c-matrix-class
