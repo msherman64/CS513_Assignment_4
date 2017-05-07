@@ -113,7 +113,7 @@ __device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 }
 
 
-__global__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
+__device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 {
 	//input: [a x b] * [b x c] = [a x c]
 	int dim_a = mat_a->col;
@@ -155,8 +155,8 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
 
         //multiply matrix i, i+1, store in d_result
 //        d_multMat<<<1,1>>>(mat_arr[i],mat_arr[i+1],d_result);
-        dim3 threaddim(DIM_LIM,DIM_LIM);
-        d_multMat_thd<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
+//        dim3 threaddim(DIM_LIM,DIM_LIM);
+//        d_multMat_thd<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
         cudaDeviceSynchronize(); //must sync before host operation on device memory 
         delete mat_arr[i];
         delete mat_arr[i+1];
@@ -173,11 +173,41 @@ bool isPowerOfTwo(ulong x)
     return (x & (x - 1)) == 0;
 }
 
+__global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result){
+    d_multMat_thd(mat_a, mat_b, result);
+}
+
+Matrix * multmat_accum(Matrix *accum, Matrix *step){
+    int dimxn = accum->col;
+    int dimyn = step->row;
+	
+	if(accum->row != step->col){
+            printf("does not match!");
+            return NULL;
+	}
+    //allocate memory for correctly sized result matrix
+    Matrix *d_result = new Matrix(dimxn,dimyn);
+
+    dim3 threads(DIM_LIM,DIM_LIM);
+    d_multmat_pair<<<1,threads>>>(accum, step, d_result);
+    
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk(cudaDeviceSynchronize());
+
+//    delete accum;
+//    delete step;
+    return d_result;
+}
+
+
+
+
 __global__ void d_multmat_chain(Matrix **mat_arr, Matrix **mat_result, int count){
 
    //get matrix pair 
 	int idx = blockIdx.x; 
-    d_multMat(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
+//    d_multMat(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
+    d_multMat_thd(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
 
 }
 
@@ -188,6 +218,7 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
         if(isPowerOfTwo(count))
         {
             int result_size = count/2;
+            dim3 threaddim(DIM_LIM,DIM_LIM);
             Matrix **d_result; //pointer to result matrix
             gpuErrchk(cudaMallocManaged(&d_result, sizeof(Matrix*) * result_size)); //pointer valid on host and device
 
@@ -196,7 +227,7 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
                 int dimyn = mat_arr[(2 * j) + 1]->row;
                 d_result[j] = new Matrix(dimxn, dimyn);
             }
-            d_multmat_chain<<<result_size,1>>>(mat_arr, d_result, result_size);
+            d_multmat_chain<<<result_size,threaddim>>>(mat_arr, d_result, result_size);
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
             //free input data
@@ -245,7 +276,7 @@ int main(int argc, char *argv[]){
     if(argc == 3){
         INIT_VAL = atof(argv[1]);
         MAT_COUNT = atoi(argv[2]);
-        printf("%d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
+        printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
     }
 
 
@@ -261,27 +292,44 @@ int main(int argc, char *argv[]){
 	//generate array of matrices from size array
 
     int *dim_ptr = dim;
+    Matrix *total_result; //pointer for total result
+    Matrix *chunk_result; //pointer to result for each chunk
+
+    dim3 threaddim(DIM_LIM, DIM_LIM); //threads per block, based on matrix size.
+
     for(int i = MAT_COUNT; i > 0; i = i - CHUNK_SIZE){
         int count = min(i, CHUNK_SIZE);
         printf("main: chunk loop %d, %d matrices\n", i, count);
+        
+        Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
 
-        Matrix **d_mat_arr = generate(dim_ptr, count);
+        printf("main: generated %d matrices\n", count);
+        //Matrix *chunk_result = chain_sequential(d_mat_arr, MAT_COUNT);
+        chunk_result = chain_tree(d_mat_arr, count);
+        printf("main: computed result for chunk %d\n", i);
 
-        //Matrix *d_result = chain_sequential(d_mat_arr, MAT_COUNT);
-        Matrix *d_result = chain_tree(d_mat_arr, count);
-        gpuErrchk( cudaPeekAtLastError() );
-        gpuErrchk(cudaDeviceSynchronize());
+        dim_ptr += count;
+        if(chunk_result){
+            if(i == MAT_COUNT){
+                total_result = chunk_result;
+            }else if(i < MAT_COUNT){ // not on first loop
+                gpuErrchk( cudaPeekAtLastError() );
+                gpuErrchk( cudaDeviceSynchronize() );
+                total_result = multmat_accum(total_result, chunk_result); //tally results
+            }
+            
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk(cudaDeviceSynchronize());
 
-        if(d_result){
-            d_printMat<<<1,1>>>(d_result);
+            d_printMat<<<1,1>>>(total_result);
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
-            printf("finished!\n");
+            printf("main: finished printing result for chunk %d\n", i);
         }
         else{
-            printf("no valid result\n");
-        }
-        dim_ptr += count;
+            printf("main: no valid result for chunk %d\n", i);
+        } 
+
     }
 	return 0;
 }
