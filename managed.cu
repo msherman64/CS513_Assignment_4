@@ -60,6 +60,10 @@ public:
        return d_data[y * col + x]; //vertical position * row length + pos in row
     }
 };
+double randMToN(double M, double N)
+{
+    return M + (rand() / ( RAND_MAX / (N-M) ) ) ;  
+}
 
 void init_matrix(Matrix *mat){
 	int x_dim = mat->row;
@@ -68,7 +72,8 @@ void init_matrix(Matrix *mat){
 
 	for(int x = 0; x < x_dim; x++){
 		for(int y = 0; y < y_dim; y++){
-			arr[x][y] = INIT_VAL;
+			//arr[x][y] = INIT_VAL;
+			arr[x][y] = randMToN(0, INIT_VAL);
 		}
 	}
 
@@ -82,7 +87,8 @@ __global__ void d_printMat(Matrix *mat)
         printf("Dim x %d, Dim y %d\n", dimxn, dimyn);
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
-                printf("%.10e ", mat->getData(x,y));
+                //printf("%.10e ", mat->getData(x,y));
+                printf("%.lf ", mat->getData(x,y));
             }
             printf("\n");
         }
@@ -133,7 +139,8 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 		if(idx < dim_a){
 		    if(idy < dim_c){
 			for(int z=0; z < dim_b; z++){
-			    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+			    //tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+			    tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 65535.), 65535.);
 			}
 			result->getData(idx,idy) = tmp;
 		    }
