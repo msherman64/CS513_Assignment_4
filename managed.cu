@@ -72,8 +72,8 @@ void init_matrix(Matrix *mat){
 
 	for(int x = 0; x < x_dim; x++){
 		for(int y = 0; y < y_dim; y++){
-			//arr[x][y] = INIT_VAL;
-			arr[x][y] = randMToN(0, INIT_VAL);
+			arr[x][y] = INIT_VAL;
+//			arr[x][y] = floor(rand() / (RAND_MAX / INIT_VAL));
 		}
 	}
 
@@ -88,12 +88,31 @@ __global__ void d_printMat(Matrix *mat)
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
                 //printf("%.10e ", mat->getData(x,y));
-                printf("%.lf ", mat->getData(x,y));
+                printf("%f ", mat->getData(x,y));
             }
             printf("\n");
         }
         printf("\n");
 }
+void printMat(Matrix *mat, FILE *f)
+{
+        int dimxn = mat->col;
+        int dimyn = mat->row;
+        size_t data_size = sizeof(double) * dimxn * dimyn;
+        fprintf(f, "Dim x %d, Dim y %d\n", dimxn, dimyn);
+        double* data = (double *)malloc(data_size);
+        cudaMemcpy(data, mat->d_data, data_size, cudaMemcpyDeviceToHost);
+        double tmp = 0.;
+        for(int y = 0; y<dimyn; y++){
+            for(int x = 0; x<dimxn; x++){
+                tmp = data[y * dimxn + x]; 
+                fprintf(f, "%f ", tmp);
+            }
+            fprintf(f, "\n");
+        }
+        fprintf(f, "\n");
+}
+
 
 __device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 {
@@ -156,28 +175,30 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
 
     Matrix *d_result; //pointer to result matrix
     gpuErrchk(cudaMallocManaged(&d_result, sizeof(Matrix))); //pointer valid on host and device
+    if(count == 1){
+        return mat_arr[0];
+    } else {
+        for(int i=0; i < count - 1; i++){
 
-    for(int i=0; i < count - 1; i++){
+            int dimxn = mat_arr[i]->col;
+            int dimyn = mat_arr[i+1]->row;
 
-        int dimxn = mat_arr[i]->col;
-        int dimyn = mat_arr[i+1]->row;
+            //allocate memory for correctly sized result matrix
+            d_result = new Matrix(dimxn,dimyn); //we will be leaking host memory here
 
-        //allocate memory for correctly sized result matrix
-        d_result = new Matrix(dimxn,dimyn); //we will be leaking host memory here
+            //multiply matrix i, i+1, store in d_result
+    //        d_multMat<<<1,1>>>(mat_arr[i],mat_arr[i+1],d_result);
+            dim3 threaddim(DIM_LIM,DIM_LIM);
+            d_multmat_pair<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk(cudaDeviceSynchronize());
+            delete mat_arr[i];
+            delete mat_arr[i+1];
+            mat_arr[i+1] = d_result;
+        }
 
-        //multiply matrix i, i+1, store in d_result
-//        d_multMat<<<1,1>>>(mat_arr[i],mat_arr[i+1],d_result);
-        dim3 threaddim(DIM_LIM,DIM_LIM);
-        d_multmat_pair<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
-        gpuErrchk( cudaPeekAtLastError() );
-        gpuErrchk(cudaDeviceSynchronize());
-        delete mat_arr[i];
-        delete mat_arr[i+1];
-        mat_arr[i+1] = d_result;
+        return d_result;
     }
-
-    return d_result;
-
 }
 
 //check if value is power of two, using bitwise AND
@@ -301,7 +322,7 @@ Matrix **generate(int *dim, int count){
 }
 
 int main(int argc, char *argv[]){
-    if(argc == 4){
+    if(argc == 5){
         INIT_VAL = atof(argv[1]);
         MAT_COUNT = atoi(argv[2]);
         printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
@@ -375,7 +396,12 @@ int main(int argc, char *argv[]){
         } 
 
     }
-
+    FILE *fp = fopen(argv[4], "w");
+    if (fp != NULL)
+    {
+        printMat(total_result, fp);
+        fclose(fp);
+    }
     d_printMat<<<1,1>>>(total_result);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk(cudaDeviceSynchronize());
