@@ -5,41 +5,57 @@ Subha Srikanth
 Kshitij Vidyut Shah
 Dhruv Dogra
 
+Description
+    The Makefile compiles both the computation code, as well as generation for a test dataset.
+
+    gen_file creates a file named input.txt, and populates it with randomly generated doubles.
+    These doubles are generated in the range form 0, to a selected input.
+    In addition, the number of matrices is specified.
+
+    In the file, constants are defined for the maximum size of each matrix, for the ILABs, 32 was chosen.
 
 
+    multiply executes the multiplication, and assumes input.txt is named as such.
+    It reads the number of matrices, their sizes, and values from the file.
 
+    It takes two arguments as well, one is to switch between sequential and parallel multiplcation, and the
+    other is to specify output file name.
+
+Compilation:
+    If needed, export the CUDA path with "export PATH=/usr/local/cuda/bin:${PATH}"
+
+    Run make
+
+Usage
+First, execute gen_file.
+
+./gen_file 0.17 100000
+
+Then, execute multiply
+./multiply tree out.txt
 
 Data structure
 
-Defined a matrix class, that stores x and y dimensions, as well as a vector of
-values. This will be defined for data of type float and int, for testing.
+Defined a matrix class, that stores x and y dimensions, as well as a device array of
+values. This is defined only for doubles.
 
 The class handles its own memory management, and supports indexing into the 
 matrix as normal.
 
 
 
-Algorithm
-1.) Sequential multiplication on the CPU
+Algorithms 1.) Sequential multiplication on the CPU
 2.) Sequential multiplication on the GPU
 3.) Optimized sequential multiplication on the GPU
 4.) Binary tree parallel multiplication on the GPU
 5.) Hybrid approach between 3 and 4.
 
+(note, assume for GPU that individual matrix elements are bein multiplied in parallel, sequential and parallel 
+above refer to how many matrices are in parallel.
+
 The goal is to keep all cores busy, while running a work-efficient algorithm. 
 We do not have enough cores to run an inefficient algorithm, even if the time
 complexity is theoretically better for large numbers of cores.
-
-
-
-
-Compliation:
-run make
-
-Usage
-./multiply 0.08 10000
-
-this will initialize 5000 matrices with the value 0.2, and then multiply.
 
 
 

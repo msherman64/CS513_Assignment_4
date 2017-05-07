@@ -1,13 +1,15 @@
-#include <stdio.h>
+#include <stdio.h> //for fprintf, fscanf, printf, etc.
+#include <float.h> //for DBL_MAX
 
 // CUDA runtime
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> //various error checking additions
 
 
 //constant for architecture
 int DIM_LIM = 32;
 int SEED = 15; //seed for rand
 int CHUNK_SIZE = 2<<14; //memory limit for ilab machine
+double fmod_arg = pow(2,52);
 //set via argument
 double INIT_VAL = 0.06;
 int MAT_COUNT = 1000;
@@ -88,7 +90,7 @@ __global__ void d_printMat(Matrix *mat)
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
                 //printf("%.10e ", mat->getData(x,y));
-                printf("%f ", mat->getData(x,y));
+                printf("%.10e ", mat->getData(x,y));
             }
             printf("\n");
         }
@@ -106,7 +108,7 @@ void printMat(Matrix *mat, FILE *f)
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
                 tmp = data[y * dimxn + x]; 
-                fprintf(f, "%f ", tmp);
+                fprintf(f, "%.10e ", tmp);
             }
             fprintf(f, "\n");
         }
@@ -158,8 +160,10 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 		if(idx < dim_a){
 		    if(idy < dim_c){
 			for(int z=0; z < dim_b; z++){
-			    //tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
-			    tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 65535.), 65535.);
+			    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+			    //tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 65535.), 65535.);
+			    //tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 256.), 256.);
+			    //tmp = tmp + mat_a->getData(idx,z) * mat_b->getData(z,idy);
 			}
 			result->getData(idx,idy) = tmp;
 		    }
@@ -321,17 +325,41 @@ Matrix **generate(int *dim, int count){
     return d_mat_arr;    
 }
 
+void init_from_file(Matrix *mat, FILE *fp){
+	int x_dim = mat->row;
+	int y_dim = mat->col;
+    double arr[x_dim][y_dim];
+	for(int x = 0; x < x_dim; x++){
+		for(int y = 0; y < y_dim; y++){
+            fscanf(fp, "%lf", &(arr[x][y])); //fscanf requires lf for double
+		}
+	}
+	gpuErrchk(cudaMemcpy(mat->d_data, arr, sizeof(arr), cudaMemcpyHostToDevice));
+}
+
+Matrix **read_file(int *dim, int count, FILE *fp){
+	Matrix **d_mat_arr;  //pointer to array of matrices on device
+    cudaMallocManaged(&d_mat_arr, sizeof(Matrix*) * count); //malloc space for pointer array
+
+	for(int i = 0; i < count; i++){
+		d_mat_arr[i] = new Matrix(dim[i], dim[i+1]); //array and matrix are shared
+		init_from_file(d_mat_arr[i], fp);                  //init values
+	}
+    return d_mat_arr;    
+}
+
+
 int main(int argc, char *argv[]){
-    if(argc == 5){
-        INIT_VAL = atof(argv[1]);
-        MAT_COUNT = atoi(argv[2]);
-        printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
-        printf("main: mode is %s\n", argv[3]);
+    if(argc == 3){
+        //INIT_VAL = atof(argv[1]);
+        //MAT_COUNT = atoi(argv[2]);
+        //printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
+        printf("main: mode is %s\n", argv[1]);
         
-        if(strcmp(argv[3], "seq") == 0)
+        if(strcmp(argv[1], "seq") == 0)
         {
             MODE = 1;
-        } else if(strcmp(argv[3], "tree") == 0)
+        } else if(strcmp(argv[1], "tree") == 0)
         {
             MODE = 2;
         }
@@ -340,12 +368,13 @@ int main(int argc, char *argv[]){
             return -1;
         }
     } else {
-        printf("main: incorrect number of arguments, must be initial value, matrix count, mode = seq or tree\n");
+        //printf("main: incorrect number of arguments, must be initial value, matrix count, mode = seq or tree\n");
+        printf("main: incorrect number of arguments, must be , mode = seq or tree, followed by output filename\n");
         return -1;
     }
 
 
-
+/* replace with input file
 	//initialize random number gen, get array sizes
     srand(SEED); //init random gen
     int dim[MAT_COUNT + 1]; //stores matrix sizes
@@ -353,6 +382,20 @@ int main(int argc, char *argv[]){
         dim[z] = rand()%DIM_LIM + 1;//random between 1 and limit
     }
 	//end initialize
+    */
+
+    FILE *fp_in = fopen("input.txt", "r");
+    int dim_arr_count = 0;
+    fscanf(fp_in, "%d", &dim_arr_count);
+    
+    int dim[dim_arr_count]; //stores matrix sizes
+    for(int z = 0; z <= dim_arr_count; z++){
+        fscanf(fp_in, "%d", &dim[z]);
+    }
+
+    MAT_COUNT = dim_arr_count - 1;
+
+
 
 	//generate array of matrices from size array
 
@@ -366,7 +409,8 @@ int main(int argc, char *argv[]){
         int count = min(i, CHUNK_SIZE);
         printf("main: chunk loop %d, %d matrices\n", i, count);
         
-        Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
+        //Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
+        Matrix **d_mat_arr = read_file(dim_ptr, count, fp_in); //generate or input step
 
         printf("main: generated %d matrices\n", count);
         if(MODE == 1){
@@ -396,7 +440,7 @@ int main(int argc, char *argv[]){
         } 
 
     }
-    FILE *fp = fopen(argv[4], "w");
+    FILE *fp = fopen(argv[2], "w");
     if (fp != NULL)
     {
         printMat(total_result, fp);
