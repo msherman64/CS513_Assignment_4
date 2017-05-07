@@ -148,30 +148,22 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 	int dim_b = mat_a->row;
 	int dim_c = mat_b->row;
 
-	int idx = threadIdx.x; 
-	int idy = threadIdx.y; 
-	double tmp = 0;
-	if(mat_a->row != mat_b->col)
-	{
-            printf("does not match!");
-	}
-	else 
-	{
-		if(idx < dim_a){
-		    if(idy < dim_c){
-			for(int z=0; z < dim_b; z++){
-			    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
-			    //tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 65535.), 65535.);
-			    //tmp = fmod(tmp + fmod(mat_a->getData(idx,z) * mat_b->getData(z,idy), 256.), 256.);
-			    //tmp = tmp + mat_a->getData(idx,z) * mat_b->getData(z,idy);
-			}
-			result->getData(idx,idy) = tmp;
-		    }
-		}
-	}
+    if(mat_a->row == mat_b->col){
+        for(int idx = threadIdx.x; idx < dim_a; idx += blockDim.x){ //block stride x
+            for(int idy = threadIdx.y; idy < dim_c; idy += blockDim.y){ //block stride y
+                double tmp = 0;
+                for(int z=0; z < dim_b; z++)
+                {
+                    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+                }
+                result->getData(idx,idy) = tmp;
+            }
+        }
+    } 
 }
 
 __global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result){
+//    d_multMat(mat_a, mat_b, result);
     d_multMat_thd(mat_a, mat_b, result);
 }
 
