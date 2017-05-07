@@ -140,10 +140,14 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 	}
 }
 
+__global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result){
+    d_multMat_thd(mat_a, mat_b, result);
+}
+
 Matrix * chain_sequential(Matrix **mat_arr, int count){
 
     Matrix *d_result; //pointer to result matrix
-    cudaMallocManaged(&d_result, sizeof(Matrix)); //pointer valid on host and device
+    gpuErrchk(cudaMallocManaged(&d_result, sizeof(Matrix))); //pointer valid on host and device
 
     for(int i=0; i < count - 1; i++){
 
@@ -155,9 +159,10 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
 
         //multiply matrix i, i+1, store in d_result
 //        d_multMat<<<1,1>>>(mat_arr[i],mat_arr[i+1],d_result);
-//        dim3 threaddim(DIM_LIM,DIM_LIM);
-//        d_multMat_thd<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
-        cudaDeviceSynchronize(); //must sync before host operation on device memory 
+        dim3 threaddim(DIM_LIM,DIM_LIM);
+        d_multmat_pair<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
+        gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk(cudaDeviceSynchronize());
         delete mat_arr[i];
         delete mat_arr[i+1];
         mat_arr[i+1] = d_result;
@@ -173,9 +178,16 @@ bool isPowerOfTwo(ulong x)
     return (x & (x - 1)) == 0;
 }
 
-__global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result){
-    d_multMat_thd(mat_a, mat_b, result);
+int largestPowTwo(int num)
+{
+    int i = 1;
+    while(i < num){
+        i = i * 2;
+    }
+    return i/2;
+
 }
+
 
 Matrix * multmat_accum(Matrix *accum, Matrix *step){
     int dimxn = accum->col;
@@ -215,7 +227,9 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
     /* do k/2 multiplications, then store results
        repeat with k/2/2, etc, until only one result
        */
-        if(isPowerOfTwo(count))
+        if(count == 1){
+            return mat_arr[0];
+        } else if(isPowerOfTwo(count))
         {
             int result_size = count/2;
             dim3 threaddim(DIM_LIM,DIM_LIM);
@@ -230,11 +244,9 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
             d_multmat_chain<<<result_size,threaddim>>>(mat_arr, d_result, result_size);
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
-            //free input data
             for(int mat_index = 0; mat_index < count; mat_index++){
                 delete mat_arr[mat_index];
             }
-            gpuErrchk(cudaFree(mat_arr));
 
             //recurse
             if(result_size == 1){
@@ -244,17 +256,25 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
             }
             else{
                 Matrix *tmp = chain_tree(d_result, result_size);
-/*                for(int mat_index = 1; mat_index < result_size; mat_index++){
-                    delete d_result[mat_index];
-                }
-                gpuErrchk(cudaFree(d_result)); */
+                //free input data
+                gpuErrchk(cudaFree(d_result));
 
                 return tmp;
             }
-        }
-        else
-        {
-            return NULL;
+        } else {
+            //call chain_tree on pow2 part
+            //call chain_tree on remainder
+            //mult results
+            //ex, 258, calls 256, calls 2, calls pair
+            int lpow2 = largestPowTwo(count);
+            printf("chain_tree: largest power of 2 is %d for result size %d\n", lpow2, count);
+
+            Matrix *tmp_a = chain_tree(mat_arr, lpow2);
+            printf("chain_tree: finished compute for %d\n", lpow2);
+
+            Matrix *tmp_b = chain_tree(mat_arr + lpow2, count - lpow2);
+            printf("chain_tree: finished compute for %d\n", count - lpow2);
+            return multmat_accum(tmp_a, tmp_b);
         }
 }
 
@@ -304,7 +324,7 @@ int main(int argc, char *argv[]){
         Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
 
         printf("main: generated %d matrices\n", count);
-        //Matrix *chunk_result = chain_sequential(d_mat_arr, MAT_COUNT);
+        //chunk_result = chain_sequential(d_mat_arr, count);
         chunk_result = chain_tree(d_mat_arr, count);
         printf("main: computed result for chunk %d\n", i);
 
