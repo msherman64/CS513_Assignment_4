@@ -11,6 +11,7 @@ int CHUNK_SIZE = 2<<14; //memory limit for ilab machine
 //set via argument
 double INIT_VAL = 0.06;
 int MAT_COUNT = 1000;
+int MODE = -1;
 
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -293,10 +294,26 @@ Matrix **generate(int *dim, int count){
 }
 
 int main(int argc, char *argv[]){
-    if(argc == 3){
+    if(argc == 4){
         INIT_VAL = atof(argv[1]);
         MAT_COUNT = atoi(argv[2]);
         printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
+        printf("main: mode is %s\n", argv[3]);
+        
+        if(strcmp(argv[3], "seq") == 0)
+        {
+            MODE = 1;
+        } else if(strcmp(argv[3], "tree") == 0)
+        {
+            MODE = 2;
+        }
+        if(MODE == -1){       
+            printf("main: incorrect mode, must be tree or seq\n");
+            return -1;
+        }
+    } else {
+        printf("main: incorrect number of arguments, must be initial value, matrix count, mode = seq or tree\n");
+        return -1;
     }
 
 
@@ -324,9 +341,13 @@ int main(int argc, char *argv[]){
         Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
 
         printf("main: generated %d matrices\n", count);
-        //chunk_result = chain_sequential(d_mat_arr, count);
-        chunk_result = chain_tree(d_mat_arr, count);
-        printf("main: computed result for chunk %d\n", i);
+        if(MODE == 1){
+            chunk_result = chain_sequential(d_mat_arr, count);
+            printf("main: computed seq result for chunk %d\n", i);
+        } else if(MODE == 2){
+            chunk_result = chain_tree(d_mat_arr, count);
+            printf("main: computed tree result for chunk %d\n", i);
+        }
 
         dim_ptr += count;
         if(chunk_result){
@@ -338,12 +359,8 @@ int main(int argc, char *argv[]){
                 total_result = multmat_accum(total_result, chunk_result); //tally results
             }
             
-            gpuErrchk( cudaPeekAtLastError() );
-            gpuErrchk(cudaDeviceSynchronize());
-
-            d_printMat<<<1,1>>>(total_result);
-            gpuErrchk( cudaPeekAtLastError() );
-            gpuErrchk( cudaDeviceSynchronize() );
+            //gpuErrchk( cudaPeekAtLastError() );
+            //gpuErrchk( cudaDeviceSynchronize() );
             printf("main: finished printing result for chunk %d\n", i);
         }
         else{
@@ -351,5 +368,10 @@ int main(int argc, char *argv[]){
         } 
 
     }
+
+    d_printMat<<<1,1>>>(total_result);
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk(cudaDeviceSynchronize());
+
 	return 0;
 }
