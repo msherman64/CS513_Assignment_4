@@ -2,7 +2,7 @@
 
 //constant for architecture
 int SEED = 12; //seed for rand //old was 15
-int DIM_LIM = 300; //max size of a matrix
+int DIM_LIM = 32; //max size of a matrix
 double INIT_VAL = 0.1; //initial value of matrix
 int MAT_COUNT = 10000; //
 
@@ -29,10 +29,7 @@ double randMToN(double M, double N)
 void gen_matrix(int rows, int cols, FILE *fp){
     for(int i = 0; i < rows; i++){//each row as outer loop
         for(int j = 0; j < cols; j++){ //each element in row, across all columns
-            //fprintf(fp, "%f ", floor(randMToN(1,INIT_VAL))); //print space after each value
-            //fprintf(fp, "%f ", randMToN(0,INIT_VAL)); //print space after each value
             fprintf(fp, "%f ", INIT_VAL); //print space after each value
-            //fprintf(fp, "%f ", INIT_VAL); //print space after each value
         }
         //print newline after each row.
         fprintf(fp, "\n");

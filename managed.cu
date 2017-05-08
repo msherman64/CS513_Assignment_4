@@ -54,8 +54,6 @@ public:
         col(columns), row(rows)        
         {cudaMalloc(&d_data, sizeof(double) * columns * rows );}
 
-//    Matrix( const Matrix& _orig ) { *this = _orig; isCopy = true;}
-//    ~Matrix(){if(!isCopy) cudaFree(d_data);}
     ~Matrix(){cudaFree(d_data);}
 
     __device__ double& getData(int x, int y){
@@ -222,7 +220,6 @@ Matrix * multmat_accum(Matrix *accum, Matrix *step){
             printf("does not match!");
             return NULL;
 	}
-    //allocate memory for correctly sized result matrix
     Matrix *d_result = new Matrix(dimxn,dimyn);
 
     dim3 threads(DIM_LIM,DIM_LIM);
@@ -231,8 +228,6 @@ Matrix * multmat_accum(Matrix *accum, Matrix *step){
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk(cudaDeviceSynchronize());
 
-//    delete accum;
-//    delete step;
     return d_result;
 }
 
@@ -312,7 +307,6 @@ Matrix **generate(int *dim, int count){
 	for(int i = 0; i < count; i++){
 		d_mat_arr[i] = new Matrix(dim[i], dim[i+1]); //array and matrix are shared
 		init_matrix(d_mat_arr[i]);                  //init values
-        //printf("matrix %d size %dx%d\n", i, d_mat_arr[i]->col, d_mat_arr[i]->row);
 	}
     return d_mat_arr;    
 }
@@ -342,10 +336,8 @@ Matrix **read_file(int *dim, int count, FILE *fp){
 
 
 int main(int argc, char *argv[]){
+    clock_t begin = clock();
     if(argc == 3){
-        //INIT_VAL = atof(argv[1]);
-        //MAT_COUNT = atoi(argv[2]);
-        //printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
         printf("main: mode is %s\n", argv[1]);
         
         if(strcmp(argv[1], "seq") == 0)
@@ -366,15 +358,7 @@ int main(int argc, char *argv[]){
     }
 
 
-/* replace with input file
-	//initialize random number gen, get array sizes
-    srand(SEED); //init random gen
-    int dim[MAT_COUNT + 1]; //stores matrix sizes
-    for(int z = 0; z <= MAT_COUNT; z++){
-        dim[z] = rand()%DIM_LIM + 1;//random between 1 and limit
-    }
-	//end initialize
-    */
+
 
     FILE *fp_in = fopen("input.txt", "r");
     int dim_arr_count = 0;
@@ -389,7 +373,7 @@ int main(int argc, char *argv[]){
 
 
 
-	//generate array of matrices from size array
+    //generate array of matrices from size array
 
     int *dim_ptr = dim;
     Matrix *total_result; //pointer for total result
@@ -422,9 +406,6 @@ int main(int argc, char *argv[]){
                 gpuErrchk( cudaDeviceSynchronize() );
                 total_result = multmat_accum(total_result, chunk_result); //tally results
             }
-            
-            //gpuErrchk( cudaPeekAtLastError() );
-            //gpuErrchk( cudaDeviceSynchronize() );
             printf("main: finished printing result for chunk %d\n", i);
         }
         else{
@@ -432,6 +413,7 @@ int main(int argc, char *argv[]){
         } 
 
     }
+    clock_t end = clock();
     FILE *fp = fopen(argv[2], "w");
     if (fp != NULL)
     {
@@ -439,8 +421,9 @@ int main(int argc, char *argv[]){
         fclose(fp);
     }
     d_printMat<<<1,1>>>(total_result);
-    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
-
-	return 0;
+    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC * 1000;
+    printf("The running time is %lf milliseconds.\n", time_spent);
+    return 0;
 }

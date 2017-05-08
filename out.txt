@@ -1,0 +1,25 @@
+Dim x 17, Dim y 23
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+
