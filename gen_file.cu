@@ -3,9 +3,9 @@
 //constant for architecture
 int SEED = 12; //seed for rand //old was 15
 int DIM_LIM = 300; //max size of a matrix
-double INIT_VAL = 0.1; //initial value of matrix
-int MAT_COUNT = 10000; //
-
+long INIT_VAL = 5; //initial value of matrix
+int MAT_COUNT = 100; //
+int MODULO = 1<<16;
 
 /* file format
 
@@ -21,17 +21,17 @@ n_{k-1} by n_k matrix k-1
 
 
 
-double randMToN(double M, double N)
+long randMToN()
 {
-    return M + (rand() / ( RAND_MAX / (N-M) ) ) ;  
+    //value determined by seed
+    //range is 1 to MODULO - 1
+    return 1 + rand() % (MODULO - 1);  
 }
 
 void gen_matrix(int rows, int cols, FILE *fp){
     for(int i = 0; i < rows; i++){//each row as outer loop
         for(int j = 0; j < cols; j++){ //each element in row, across all columns
-            //fprintf(fp, "%f ", floor(randMToN(1,INIT_VAL))); //print space after each value
-            //fprintf(fp, "%f ", randMToN(0,INIT_VAL)); //print space after each value
-            fprintf(fp, "%f ", INIT_VAL); //print space after each value
+            fprintf(fp, "%ld ", randMToN()); //print space after each value
             //fprintf(fp, "%f ", INIT_VAL); //print space after each value
         }
         //print newline after each row.
@@ -48,11 +48,12 @@ void gen_matrix(int rows, int cols, FILE *fp){
 int main(int argc, char *argv[]){
 
     if(argc == 3){
-        INIT_VAL = atof(argv[1]);
+//        INIT_VAL = atof(argv[1]);
+        DIM_LIM = atof(argv[1]);
         MAT_COUNT = atoi(argv[2]);
-        printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
+        printf("main: %d matrices of max size %d\n", MAT_COUNT, DIM_LIM);
     } else {
-        printf("incorrect input values, must be max initial value, and number of matrices");
+        printf("incorrect input values: must be max matrix size, number of matrices\n");
         return -1;
     }
 
