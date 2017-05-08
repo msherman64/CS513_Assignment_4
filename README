@@ -1,8 +1,8 @@
 MEMBERS
 
 Michael Sherman
-Subha Srikanth
 Kshitij Vidyut Shah
+Subha Srikanth
 Dhruv Dogra
 
 Description
@@ -26,10 +26,24 @@ Compilation:
 
     Run make
 
+MACROS:
+    set MOD_MODE to 0 to disable modulus on each multiplication
+    set MOD_MODE to 1 to enable single modulus on each multiplication + addition
+    set MDO_MODE to 2 to enable double modulus, one on multiplication, on on addition
+
+    set MODULO to desired value for wrap around
+    set ADD_CONSTANT to integer value to add constant term to each addition.
+
+    These terms are an attempt to avoid overflow/underflow, and zeros propagating.
+
+    For NORMAL operation, set MOD_MODE to 0, and ADD_CONSTANT to 0
+
+ 
+
 Usage
     First, execute gen_file.
 
-    ./gen_file 0.17 100000
+    ./gen_file 5 100000
 
     Then, execute multiply
     ./multiply tree out.txt

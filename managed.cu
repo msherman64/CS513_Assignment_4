@@ -1,8 +1,11 @@
-#include <stdio.h> //for fprintf, fscanf, printf, etc.
-#include <float.h> //for DBL_MAX
+#include <stdio.h> // for fprintf, fscanf, printf, etc.
+#include <float.h> // for DBL_MAX
 
 // CUDA runtime
 #include <cuda_runtime.h> //various error checking additions
+
+#define MOD_MODE 2 // 0 for no modulus, 1 for single modulus around mult + sum, 2 for modulus of mult, then modulus of sum
+#define ADD_CONSTANT 0 // This constant will be added as salt in operations to prevent zeroing. But it looses associativity 
 
 
 //constant for architecture
@@ -10,10 +13,13 @@ int DIM_LIM = 32;
 int SEED = 15; //seed for rand
 int CHUNK_SIZE = 2<<14; //memory limit for ilab machine
 double fmod_arg = pow(2,52);
+
+
 //set via argument
-double INIT_VAL = 0.06;
+long INIT_VAL = 5;
 int MAT_COUNT = 1000;
 int MODE = -1;
+long MODULO = 1<<16;
 
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -47,40 +53,20 @@ class Matrix : public Managed {
 public:
     int row; //number of rows, y
     int col; //number of columns, x
-    double* d_data;
+    long* d_data;
     bool isCopy;
     
     Matrix(int columns, int rows) :
         col(columns), row(rows)        
-        {cudaMalloc(&d_data, sizeof(double) * columns * rows );}
+        {cudaMalloc(&d_data, sizeof(long) * columns * rows );}
 
-//    Matrix( const Matrix& _orig ) { *this = _orig; isCopy = true;}
-//    ~Matrix(){if(!isCopy) cudaFree(d_data);}
     ~Matrix(){cudaFree(d_data);}
 
-    __device__ double& getData(int x, int y){
+    __device__ long& getData(int x, int y){
        return d_data[y * col + x]; //vertical position * row length + pos in row
     }
 };
-double randMToN(double M, double N)
-{
-    return M + (rand() / ( RAND_MAX / (N-M) ) ) ;  
-}
 
-void init_matrix(Matrix *mat){
-	int x_dim = mat->row;
-	int y_dim = mat->col;
-    double arr[x_dim][y_dim];
-
-	for(int x = 0; x < x_dim; x++){
-		for(int y = 0; y < y_dim; y++){
-			arr[x][y] = INIT_VAL;
-//			arr[x][y] = floor(rand() / (RAND_MAX / INIT_VAL));
-		}
-	}
-
-	cudaMemcpy(mat->d_data, arr, sizeof(arr), cudaMemcpyHostToDevice);
-}
 
 __global__ void d_printMat(Matrix *mat)
 {   
@@ -90,7 +76,7 @@ __global__ void d_printMat(Matrix *mat)
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
                 //printf("%.10e ", mat->getData(x,y));
-                printf("%.10e ", mat->getData(x,y));
+                printf("%ld ", mat->getData(x,y));
             }
             printf("\n");
         }
@@ -100,15 +86,15 @@ void printMat(Matrix *mat, FILE *f)
 {
         int dimxn = mat->col;
         int dimyn = mat->row;
-        size_t data_size = sizeof(double) * dimxn * dimyn;
+        size_t data_size = sizeof(long) * dimxn * dimyn;
         fprintf(f, "Dim x %d, Dim y %d\n", dimxn, dimyn);
-        double* data = (double *)malloc(data_size);
+        long* data = (long *)malloc(data_size);
         cudaMemcpy(data, mat->d_data, data_size, cudaMemcpyDeviceToHost);
-        double tmp = 0.;
+        long tmp = 0.;
         for(int y = 0; y<dimyn; y++){
             for(int x = 0; x<dimxn; x++){
                 tmp = data[y * dimxn + x]; 
-                fprintf(f, "%.10e ", tmp);
+                fprintf(f, "%ld ", tmp);
             }
             fprintf(f, "\n");
         }
@@ -116,7 +102,8 @@ void printMat(Matrix *mat, FILE *f)
 }
 
 
-__device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
+//Multiply matrices single thread on Device
+__device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result, int modulo)
 {
 	//input: [a x b] * [b x c] = [a x c]
 	int dim_a = mat_a->col;
@@ -127,12 +114,22 @@ __device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
             printf("does not match!");
 	}
 	else {
-		double tmp = 0;
+		long tmp = 0;
 		for(int x=0; x < dim_a; x++){
 		    for(int y=0; y < dim_c; y++){
 			tmp=0;	
 			for(int z=0; z < dim_b; z++){
-			    tmp += mat_a->getData(x,z) * mat_b->getData(z,y);
+                switch(MOD_MODE) {
+                    case 0 :
+                        tmp += mat_a->getData(x,z) * mat_b->getData(z,y) + ADD_CONSTANT;
+                        break;
+                    case 1 :
+                        tmp = (tmp + (mat_a->getData(x,z) * mat_b->getData(z,y))) % modulo + ADD_CONSTANT;
+                        break;
+                    case 2 :
+                        tmp = (tmp + ((mat_a->getData(x,z) * mat_b->getData(z,y)) % modulo)) % modulo + ADD_CONSTANT;
+                        break;
+                }
 			}
 			result->getData(x,y)=tmp;
 		    }
@@ -140,8 +137,8 @@ __device__ void d_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result)
 	}
 }
 
-
-__device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
+//Multiply matrices multi thread on Device
+__device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result, int modulo)
 {
 	//input: [a x b] * [b x c] = [a x c]
 	int dim_a = mat_a->col;
@@ -151,10 +148,20 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
     if(mat_a->row == mat_b->col){
         for(int idx = threadIdx.x; idx < dim_a; idx += blockDim.x){ //block stride x
             for(int idy = threadIdx.y; idy < dim_c; idy += blockDim.y){ //block stride y
-                double tmp = 0;
+                long tmp = 0;
                 for(int z=0; z < dim_b; z++)
                 {
-                    tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy);
+                    switch(MOD_MODE) {
+                        case 0 :
+                            tmp += mat_a->getData(idx,z) * mat_b->getData(z,idy) + ADD_CONSTANT;
+                            break;
+                        case 1 :
+                            tmp = tmp + ((mat_a->getData(idx,z) * mat_b->getData(z,idy)) % modulo) + ADD_CONSTANT;
+                            break;
+                        case 2 :
+                            tmp = (tmp + ((mat_a->getData(idx,z) * mat_b->getData(z,idy)) % modulo)) % modulo + ADD_CONSTANT;
+                            break;
+                    }
                 }
                 result->getData(idx,idy) = tmp;
             }
@@ -162,11 +169,33 @@ __device__ void d_multMat_thd(Matrix *mat_a, Matrix *mat_b, Matrix *result)
     } 
 }
 
-__global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result){
-//    d_multMat(mat_a, mat_b, result);
-    d_multMat_thd(mat_a, mat_b, result);
+//Multiply matrices single thread on Host
+void host_multMat(Matrix *mat_a, Matrix *mat_b, Matrix *result, int modulo){
+	int dim_a = mat_a->col;
+	int dim_b = mat_a->row;
+	int dim_c = mat_b->row;
+    long tmp = 0;
+        
+	if(mat_a->row != mat_b->col)
+	{
+            printf("does not match!");
+            return;
+	}
+        for(int x=0; x<dim_a; x++){
+            for(int y=0; y<dim_c; y++){
+                for(int z=0; z<dim_b; z++){
+                   tmp = (tmp + mat_a->getDataHost(x,z) * mat_b->getDataHost(z,y)) % modulo + ADD_CONSTANT; 
+                }
+            result->getDataHost(x,y) = tmp;
+            }
+        }
 }
 
+__global__ void d_multmat_pair(Matrix *mat_a, Matrix *mat_b, Matrix *result, int modulo){
+    d_multMat_thd(mat_a, mat_b, result, modulo);
+}
+
+//Chain in sequential, Individual matrix in parallel
 Matrix * chain_sequential(Matrix **mat_arr, int count){
 
     Matrix *d_result; //pointer to result matrix
@@ -182,10 +211,8 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
             //allocate memory for correctly sized result matrix
             d_result = new Matrix(dimxn,dimyn); //we will be leaking host memory here
 
-            //multiply matrix i, i+1, store in d_result
-    //        d_multMat<<<1,1>>>(mat_arr[i],mat_arr[i+1],d_result);
             dim3 threaddim(DIM_LIM,DIM_LIM);
-            d_multmat_pair<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result);
+            d_multmat_pair<<<1,threaddim>>>(mat_arr[i],mat_arr[i+1],d_result, MODULO);
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk(cudaDeviceSynchronize());
             delete mat_arr[i];
@@ -193,6 +220,26 @@ Matrix * chain_sequential(Matrix **mat_arr, int count){
             mat_arr[i+1] = d_result;
         }
 
+        return d_result;
+    }
+}
+
+Matrix * chain_sequential_onHost(Matrix **mat_arr, int count){
+    Matrix *d_result; //pointer to result matrix
+    gpuErrchk(cudaMallocManaged(&d_result, sizeof(Matrix))); //pointer valid on host and device
+    if(count == 1){
+        return mat_arr[0];
+    } else {
+        for(int i=0; i < count - 1; i++){
+
+            int dimxn = mat_arr[i]->col;
+            int dimyn = mat_arr[i+1]->row;
+            d_result = new Matrix(dimxn,dimyn);
+            //host_multMat(mat_arr[i],mat_arr[i+1],d_result, MODULO);
+            delete mat_arr[i];
+            delete mat_arr[i+1];
+            mat_arr[i+1] = d_result;
+        }
         return d_result;
     }
 }
@@ -222,32 +269,31 @@ Matrix * multmat_accum(Matrix *accum, Matrix *step){
             printf("does not match!");
             return NULL;
 	}
+	
     //allocate memory for correctly sized result matrix
     Matrix *d_result = new Matrix(dimxn,dimyn);
 
     dim3 threads(DIM_LIM,DIM_LIM);
-    d_multmat_pair<<<1,threads>>>(accum, step, d_result);
+    d_multmat_pair<<<1,threads>>>(accum, step, d_result, MODULO);
     
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk(cudaDeviceSynchronize());
 
-//    delete accum;
-//    delete step;
     return d_result;
 }
 
 
 
 
-__global__ void d_multmat_chain(Matrix **mat_arr, Matrix **mat_result, int count){
+__global__ void d_multmat_chain(Matrix **mat_arr, Matrix **mat_result, int count, int modulo){
 
    //get matrix pair 
-	int idx = blockIdx.x; 
-//    d_multMat(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
-    d_multMat_thd(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx]);
+    int idx = blockIdx.x; 
+    d_multMat_thd(mat_arr[2 * idx], mat_arr[2 * idx +1], mat_result[idx], modulo);
 
 }
 
+//Chain in parallel, Individual matrix in sequential
 Matrix * chain_tree(Matrix **mat_arr, int count){
     /* do k/2 multiplications, then store results
        repeat with k/2/2, etc, until only one result
@@ -266,7 +312,7 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
                 int dimyn = mat_arr[(2 * j) + 1]->row;
                 d_result[j] = new Matrix(dimxn, dimyn);
             }
-            d_multmat_chain<<<result_size,threaddim>>>(mat_arr, d_result, result_size);
+            d_multmat_chain<<<result_size,threaddim>>>(mat_arr, d_result, result_size, MODULO);
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
             for(int mat_index = 0; mat_index < count; mat_index++){
@@ -304,26 +350,13 @@ Matrix * chain_tree(Matrix **mat_arr, int count){
 }
 
 
-
-Matrix **generate(int *dim, int count){
-	Matrix **d_mat_arr;  //pointer to array of matrices on device
-    cudaMallocManaged(&d_mat_arr, sizeof(Matrix*) * count); //malloc space for pointer array
-
-	for(int i = 0; i < count; i++){
-		d_mat_arr[i] = new Matrix(dim[i], dim[i+1]); //array and matrix are shared
-		init_matrix(d_mat_arr[i]);                  //init values
-        //printf("matrix %d size %dx%d\n", i, d_mat_arr[i]->col, d_mat_arr[i]->row);
-	}
-    return d_mat_arr;    
-}
-
 void init_from_file(Matrix *mat, FILE *fp){
 	int x_dim = mat->row;
 	int y_dim = mat->col;
-    double arr[x_dim][y_dim];
+    long arr[x_dim][y_dim];
 	for(int x = 0; x < x_dim; x++){
 		for(int y = 0; y < y_dim; y++){
-            fscanf(fp, "%lf", &(arr[x][y])); //fscanf requires lf for double
+            fscanf(fp, "%ld", &(arr[x][y])); //fscanf requires ld for double
 		}
 	}
 	gpuErrchk(cudaMemcpy(mat->d_data, arr, sizeof(arr), cudaMemcpyHostToDevice));
@@ -342,10 +375,8 @@ Matrix **read_file(int *dim, int count, FILE *fp){
 
 
 int main(int argc, char *argv[]){
+    clock_t begin = clock();
     if(argc == 3){
-        //INIT_VAL = atof(argv[1]);
-        //MAT_COUNT = atoi(argv[2]);
-        //printf("main: %d matrices of initial value is %f\n", MAT_COUNT, INIT_VAL);
         printf("main: mode is %s\n", argv[1]);
         
         if(strcmp(argv[1], "seq") == 0)
@@ -366,22 +397,13 @@ int main(int argc, char *argv[]){
     }
 
 
-/* replace with input file
-	//initialize random number gen, get array sizes
-    srand(SEED); //init random gen
-    int dim[MAT_COUNT + 1]; //stores matrix sizes
-    for(int z = 0; z <= MAT_COUNT; z++){
-        dim[z] = rand()%DIM_LIM + 1;//random between 1 and limit
-    }
-	//end initialize
-    */
 
     FILE *fp_in = fopen("input.txt", "r");
     int dim_arr_count = 0;
     fscanf(fp_in, "%d", &dim_arr_count);
     
     int dim[dim_arr_count]; //stores matrix sizes
-    for(int z = 0; z <= dim_arr_count; z++){
+    for(int z = 0; z < dim_arr_count; z++){
         fscanf(fp_in, "%d", &dim[z]);
     }
 
@@ -389,8 +411,8 @@ int main(int argc, char *argv[]){
 
 
 
-	//generate array of matrices from size array
-
+	
+    //Generate array of matrices from size array
     int *dim_ptr = dim;
     Matrix *total_result; //pointer for total result
     Matrix *chunk_result; //pointer to result for each chunk
@@ -401,7 +423,6 @@ int main(int argc, char *argv[]){
         int count = min(i, CHUNK_SIZE);
         printf("main: chunk loop %d, %d matrices\n", i, count);
         
-        //Matrix **d_mat_arr = generate(dim_ptr, count); //generate or input step
         Matrix **d_mat_arr = read_file(dim_ptr, count, fp_in); //generate or input step
 
         printf("main: generated %d matrices\n", count);
@@ -422,9 +443,6 @@ int main(int argc, char *argv[]){
                 gpuErrchk( cudaDeviceSynchronize() );
                 total_result = multmat_accum(total_result, chunk_result); //tally results
             }
-            
-            //gpuErrchk( cudaPeekAtLastError() );
-            //gpuErrchk( cudaDeviceSynchronize() );
             printf("main: finished printing result for chunk %d\n", i);
         }
         else{
@@ -432,6 +450,7 @@ int main(int argc, char *argv[]){
         } 
 
     }
+    clock_t end = clock();
     FILE *fp = fopen(argv[2], "w");
     if (fp != NULL)
     {
@@ -441,6 +460,7 @@ int main(int argc, char *argv[]){
     d_printMat<<<1,1>>>(total_result);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk(cudaDeviceSynchronize());
-
-	return 0;
+    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC * 1000;
+    printf("The running time is %lf milliseconds.\n", time_spent);
+    return 0;
 }
